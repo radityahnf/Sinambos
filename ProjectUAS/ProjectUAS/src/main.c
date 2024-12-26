@@ -1,3 +1,10 @@
+/**
+ * \file
+ *
+ * \brief Proyek UAS Sinambos
+ *
+ */
+
 #include <asf.h>
 #include <stdio.h>
 #include "FreeRTOS/include/FreeRTOS.h"
@@ -6,159 +13,103 @@
 #include "FreeRTOS/include/timers.h"
 #include "FreeRTOS/include/semphr.h"
 
-int score = 0;
-int phase = 0;
-int incremental = 0;
-int distance = 0;
-static char buffarray[200];
-
-
-/* Define a task */
-static portTASK_FUNCTION_PROTO(vSoilMoistureSensor, p_);
-static portTASK_FUNCTION_PROTO(vServo, q_);
-static portTASK_FUNCTION_PROTO(vDistanceSensor, r_);
+/* Define FreeRTOS tasks */
+static portTASK_FUNCTION_PROTO(vUltrasonicSensor, p_);
+static portTASK_FUNCTION_PROTO(vBlinkLed1, q_);
+static portTASK_FUNCTION_PROTO(vCounter, r_);
 static portTASK_FUNCTION_PROTO(vPushButton1, s_);
 
 /* Define semaphore */
 SemaphoreHandle_t xSemaphore;
 uint16_t counter = 0;
 
-uint16_t map(uint16_t x, uint16_t in_min, uint16_t in_max, uint16_t out_min, uint16_t out_max) {
-	return ((uint32_t)(x - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min;
-}
+
+/* Define functions */
+void setup_timer(void);
+void print_message(void);
+
+/* Soil Moisture Sensor Variables */
 
 
-// Function to initialize ADC for potentiometer reading
-void adc_init() {
-	ADCB.CTRLA = 0x01;
-	ADCB.CTRLB = 0x00;
-	ADCB.REFCTRL = 0x02;
-	ADCB.PRESCALER = 0b0000111;
-}
+/* Ultrasonic Sensor Variables */
+uint16_t score = 0;
+uint16_t incremental = 0;
+uint16_t distance = 0;		// Needed for UART
 
-// Read value from ADC
-uint16_t read_adc_ch0() {
-	// Start a conversion on ADC channel 0
-	ADCB.CH0.MUXCTRL = 0x00; // Select ADC pin 0
-	ADCB.CH0.CTRL |= 0x81;
+/*
 
-	// Wait for conversion to complete
-	while (!(ADCB.INTFLAGS & 0x01)); // Wait for interrupt flag
+// OPTION 1: THIS IS THE TIMER USING FREERTOS TIMER
 
-	// Read the conversion result
-	uint16_t result = ADCB.CH0RES;
-	
-	return result;
-}
+uint32_t previousMicros = 0;
+uint32_t incrementInterval = 29; // 29 microseconds for each increment
 
-/* PWM configurations for servo */
-void PWM_Init(void)
-{
-	/* Set output */
-	PORTC.DIR |= PIN0_bm;	// PC0
-	/* Set Register */
-	TCC0.CTRLA = (PIN2_bm) | (PIN1_bm);		// Berdasarkan datasheet, 0110 adalah prescaler 256
-	TCC0.CTRLB = (PIN4_bm) | (PIN2_bm) | (PIN1_bm);		// Berdasarkan datasheet, pin4 dan 110 adalah enable cca dan double-slope pwm
-	/* Set Period */
-	TCC0.PER = 156;		// didapat dari rumus PER = clock / (prescaler x frekuensi) dmn clocknya 2MHz (default system clock), prescaler 256, dan frekuensi 50hz (dari 20ms pulse cycle servo)
-	/* Set Compare Register value*/
-	TCC0.CCA = 1;
-}
+// Timer handle
+TimerHandle_t xIncrementTimer;
 
-int main(void) {
-	/* System clock initialization */
-	sysclk_init();
-	board_init();
-	gfx_mono_init();
-
-	gpio_set_pin_high(LCD_BACKLIGHT_ENABLE_PIN);
-	gfx_mono_draw_string("RaihanRadityaRafinal", 0, 0, &sysfont);
-
-	/* Create the task */
-	xTaskCreate(vSoilMoistureSensor, "", 1000, NULL, tskIDLE_PRIORITY + 1, NULL);
-	xTaskCreate(vServo, "", 1000, NULL, tskIDLE_PRIORITY + 2, NULL);
-	xTaskCreate(vPushButton1, "", 1000, NULL, tskIDLE_PRIORITY + 3, NULL);
-	xTaskCreate(vCounter, "", 1000, NULL, tskIDLE_PRIORITY, NULL);
-
-	/* Semaphore */
-	xSemaphore = xSemaphoreCreateBinary();
-	xSemaphoreGive(xSemaphore);
-
-	/* Start the task */
-	vTaskStartScheduler();
-}
-
-static portTASK_FUNCTION(vSoilMoistureSensor, p_) {
-	char strbuf[128];
-	/* Initialize ADC */
-	adc_init();
-
-	while (1) {
-		// Read ADC value from potentiometer
-		uint16_t adc_result = read_adc_ch0();
-		
-		// Map ADC value (0-4095) to PWM duty cycle (50 to 84)
-		duty_cycle = map(adc_result, 0, 4095, 50, 84);
-		
-		// Display the ADC and Duty Cycle value on LCD
-		snprintf(strbuf, sizeof(strbuf), "Soil: %d", adc_result);
-		gfx_mono_draw_string(strbuf, 0, 16, &sysfont);
-		
-		vTaskDelay(10 / portTICK_PERIOD_MS);
+void vIncrementCallback(TimerHandle_t xTimer) {
+	if (xSemaphoreTake(xSemaphore, (TickType_t)10) == pdTRUE) {
+		incremental = incremental + 1;  // Increment the value every 29 microseconds
+		xSemaphoreGive(xSemaphore);
 	}
 }
 
-static portTASK_FUNCTION(vServo, q_) {
-	char strbuf[128];
-	/* Initialize PWM for servo control */
-	PWM_Init();
-	// variables for controlling servo
-	uint16_t duty_cycle = 1;
-	uint16_t direction = 1;
-	
-	while (1) {
-		if (xSemaphoreTake(xSemaphore, (TickType_t)10) == pdTRUE) {
-			TCC0.CCA = duty_cycle;
-			
-			// Update the duty cycle
-			duty_cycle += direction;
-			
-			// Change direction if reach the ends
-			// 1 for 0 Degress and 10 for 180 degrees
-			if (duty_cycle >= 10) {
-				direction = -1; // Change direction to decrease
-				} else if (duty_cycle <= 1) {
-				direction = 1; // Change direction to increase
-			}
+// Function to setup the software timer
+void setup_timer(void) {
+	// Create a timer that will call the vIncrementCallback function every 29 microseconds
+	xIncrementTimer = xTimerCreate("IncrementTimer", pdMS_TO_TICKS(0.029), pdTRUE, (void *)0, vIncrementCallback);
 
-			// Display the duty cycle value to keep track
-			snprintf(strbuf, sizeof(strbuf), "Servo Duty: %u", duty_cycle);
-			gfx_mono_draw_string(strbuf, 0, 24, &sysfont);
-
-			xSemaphoreGive(xSemaphore);
-		}
-		vTaskDelay(20 / portTICK_PERIOD_MS); // Adjust delay for smooth movement
+	if (xIncrementTimer == NULL) {
+		// Timer creation failed
+		gfx_mono_draw_string("FAILED", 0, 16, &sysfont);
+	} else {
+		// Start the timer with a period of 29 microseconds
+		xTimerStart(xIncrementTimer, 0);
 	}
 }
 
+*/
+
+// OPTION 2: THIS IS THE TIMER USING TC LIBRARY FROM ATMEL STUDIO
 //Fungsi setup timer
 void setup_timer(void){
-	tc_enable(&TCC0);
-	tc_set_overflow_interrupt_callback(&TCC0,print_message);
-	tc_set_wgm(&TCC0, TC_WG_NORMAL);
-	tc_write_period(&TCC0, 58);
-	tc_set_overflow_interrupt_level(&TCC0, TC_INT_LVL_HI);
-	tc_write_clock_source(&TCC0, TC_CLKSEL_DIV1_gc);
+	tc_enable(&TCE1);
+	tc_set_overflow_interrupt_callback(&TCE1,print_message);
+	tc_set_wgm(&TCE1, TC_WG_NORMAL);
+	tc_write_period(&TCE1, 58);		// 29 microseconds
+	tc_set_overflow_interrupt_level(&TCE1, TC_INT_LVL_HI);
+	// tc_write_clock_source(&TCE1, TC_CLKSEL_DIV1_gc);
+	tc_write_clock_source(&TCE1, TC_CLKSEL_OFF_gc); // Stop the timer
+	//tc_disable(&TCE1);	// Stop the timer (fails bruh)
 }
 
 //Fungsi ini bukan utk print message, tapi increment nilai variabel "increment" setiap 29us
 void print_message(void){
-	incremental = incremental + 1;
+	char strbuf[128];
+	
+	/**
+	 * Semaphore di bawah ini dikomen alias salah!! karena JANGAN PERNAH AMBIL SEMAPHORE DI DALAM TASK YG LAGI PAKE SEMAPHORE
+	 * KARENA GABAKAL BISA DIAMBIL KAN MASIH DIPAKE TASK YG MANGGIL CALLBACK FUNCTION INI (si task ultrasonic)
+	 * ENDINGNYA MALAH STUCK NGELOOP 1000 TAHUN NUNGGUIN SEMAPHORENYA BISA DIAMBIL
+	 */
+	
+	//if (xSemaphoreTake(xSemaphore, (TickType_t)10) == pdTRUE) {		
+		incremental = incremental + 1;
+		//xSemaphoreGive(xSemaphore);
+	//}
 }
 
-static portTASK_FUNCTION(vUltrasonicSensor, s_) {
-	char strbuf[128];
 
+int main (void)
+{
+	/* Insert system clock initialization code here (sysclk_init()). */
+	// sysclk_init();
+	board_init();
+	pmic_init();
+	gfx_mono_init();
+	
+	gpio_set_pin_high(LCD_BACKLIGHT_ENABLE_PIN);
+	gfx_mono_draw_string("RTOS v10.2.1", 0, 0, &sysfont);
+	
 	// Workaround for known issue: Enable RTC32 sysclk
 	sysclk_enable_module(SYSCLK_PORT_GEN, SYSCLK_RTC);
 	while (RTC32.SYNCCTRL & RTC32_SYNCBUSY_bm) {
@@ -166,53 +117,119 @@ static portTASK_FUNCTION(vUltrasonicSensor, s_) {
 	}
 	
 	delay_ms(1000);
-	setup_timer();
+
+	setup_timer();		// used when using timer from freertos, because should run before vtaskstartscheduler
+	/* Create the task */
 	
-	// Insert application code here, after the board has been initialized.
-	while(1){
-		PORTB.DIR = 0b11111111; //Set output
-		PORTB.OUT = 0b00000000; //Set low
-		PORTB.OUT = 0b11111111; //Set high selama 5us
-		delay_us(5);
-		PORTB.OUT = 0b00000000; //Kembali menjadi low
-		PORTB.DIR = 0b00000000; //Set menjadi input
-		delay_us(750); //Delay holdoff selama 750us
-		int oldinc = incremental;
-		delay_us(115); //Delay lagi, kali ini seharusnya pin menjadi high
-		cpu_irq_enable(); //Mulai interrupt
-		while(PORTB.IN & PIN0_bm){
-			//Tidak ada apa-apa di sini. Loop ini berfungsi untuk mendeteksi pin 0 PORT B yang berubah menjadi low
-		}
-		int newinc = incremental; //Catat selisih waktu antara suara dikirim hingga diterima
-		cpu_irq_disable(); //Interrupt dimatikan
-		if (incremental > 300){ //Jika hasil lebih dari 300 cm, dibulatkan menjadi 300 cm
-			score = 300;
-			snprintf(buffarray, sizeof(buffarray), "Panjang: %d cm  ", score);
-			gfx_mono_draw_string(buffarray, 0, 0, &sysfont);
-			delay_ms(100);
-			incremental = 0;
+	xTaskCreate(vUltrasonicSensor, "", 1000, NULL, tskIDLE_PRIORITY + 0, NULL);	// higher priority
+	xTaskCreate(vBlinkLed1, "", 1000, NULL, tskIDLE_PRIORITY + 2, NULL);	// higher priority
+	xTaskCreate(vPushButton1, "", 1000, NULL, tskIDLE_PRIORITY + 3, NULL);	// higher priority
+	xTaskCreate(vCounter, "", 1000, NULL, tskIDLE_PRIORITY + 1, NULL);			// low priority
+	
+	/* Semaphore */
+	xSemaphore = xSemaphoreCreateBinary();
+	xSemaphoreGive(xSemaphore);
+	
+	/* Start the task */
+	vTaskStartScheduler();
+}
+
+
+static portTASK_FUNCTION(vUltrasonicSensor, p_) {
+	char strbuf[128];	
+	//setup_timer();
+	while(1) {
+		if (xSemaphoreTake(xSemaphore, (TickType_t)10) == pdTRUE) {
+			//xTimerStart(xIncrementTimer, 0);		// Start the timer (doesnt work bruh)
+			//tc_enable(&TCE1);		// Start the timer (doesnt work bruh)
+			tc_write_clock_source(&TCE1, TC_CLKSEL_DIV1_gc);	// Start the timer
+			
+			PORTB.DIR = 0b11111111; //Set output
+			PORTB.OUT = 0b00000000; //Set low
+			PORTB.OUT = 0b11111111; //Set high selama 5us
+			delay_us(5);
+			PORTB.OUT = 0b00000000; //Kembali menjadi low
+			PORTB.DIR = 0b00000000; //Set menjadi input
+			delay_us(400); //Delay holdoff selama 750us
+			int oldinc = incremental;
+			delay_us(115); //Delay lagi, kali ini seharusnya pin menjadi high
+			
+			// taskENTER_CRITICAL();	// freertos substitute for cpu_irq_enable (fails)
+			cpu_irq_enable(); //Mulai interrupt
+			
+			while(PORTB.IN & PIN0_bm){
+				//Tidak ada apa-apa di sini. Loop ini berfungsi untuk mendeteksi pin 0 PORT B yang berubah menjadi low
+			}
+			int newinc = incremental; //Catat selisih waktu antara suara dikirim hingga diterima
+			
+			// xTimerStop(xIncrementTimer, 0);		// Stop the timer  (doesnt work bruh)
+			// tc_disable(&TCE1);		// Stop the timer  (doesnt work bruh)
+			tc_write_clock_source(&TCE1, TC_CLKSEL_OFF_gc); // Stop the timer
+
+			//taskEXIT_CRITICAL();		// freertos substitute for cpu_irq_disable (fails)
+			cpu_irq_disable(); //Interrupt dimatikan
+			
+			if (incremental > 300){ //Jika hasil lebih dari 300 cm, dibulatkan menjadi 300 cm
+				distance = 300;
+				snprintf(strbuf, sizeof(strbuf), "Panjang: %d cm   ", distance);
+				gfx_mono_draw_string(strbuf, 0, 0, &sysfont);
+				incremental = 0;
 			} else {
-			int inc = newinc - oldinc;
-			int newscore = inc/2; //Dibagi 2 seperti rumus sonar
-			snprintf(buffarray, sizeof(buffarray), "Panjang: %d cm  ", newscore);
-			gfx_mono_draw_string(buffarray, 0, 0, &sysfont);
-			delay_ms(100);
-			incremental = 0; //reset nilai variable incremental
+				int inc = newinc - oldinc;
+				distance = inc/2; //Dibagi 2 seperti rumus sonar
+				snprintf(strbuf, sizeof(strbuf), "Panjang: %d cm   ", distance);
+				gfx_mono_draw_string(strbuf, 0, 0, &sysfont);
+				incremental = 0; //reset nilai variable incremental
+			}
+			xSemaphoreGive(xSemaphore);
 		}
+		vTaskDelay(150 / portTICK_PERIOD_MS);
+	}
+}
+
+static portTASK_FUNCTION(vBlinkLed1, q_) {	
+	char strbuf[128];
+	int flagLed1 = 0;
+	
+	while(1) {
+		flagLed1 = !flagLed1;
+		ioport_set_pin_level(LED1_GPIO, flagLed1);
+		snprintf(strbuf, sizeof(strbuf), "LED 1 : %d", !flagLed1);
+		gfx_mono_draw_string(strbuf,0, 24, &sysfont);
+		vTaskDelay(375/portTICK_PERIOD_MS);
+	}
+}
+
+static portTASK_FUNCTION(vPushButton1, s_) {
+	char strbuf[128];
+	
+	while(1) {
+		
+		if(ioport_get_pin_level(GPIO_PUSH_BUTTON_1)==0){
+			if(xSemaphoreTake(xSemaphore, (TickType_t) 10) == pdTRUE) {
+				counter++;
+				snprintf(strbuf, sizeof(strbuf), "Counter : %d", counter);
+				gfx_mono_draw_string(strbuf,0, 8, &sysfont);
+				xSemaphoreGive(xSemaphore);
+			}
+		}
+		
+		vTaskDelay(10/portTICK_PERIOD_MS);
 	}
 }
 
 static portTASK_FUNCTION(vCounter, r_) {
 	char strbuf[128];
-
-	while (1) {
-		if (xSemaphoreTake(xSemaphore, (TickType_t)10) == pdTRUE) {
+	
+	while(1) {
+		
+		if(xSemaphoreTake(xSemaphore, (TickType_t) 10) == pdTRUE) {
 			counter++;
 			snprintf(strbuf, sizeof(strbuf), "Counter : %d", counter);
-			gfx_mono_draw_string(strbuf, 0, 8, &sysfont);
-			xSemaphoreGive(xSemaphore);
+			gfx_mono_draw_string(strbuf,0, 8, &sysfont);
+			xSemaphoreGive(xSemaphore);	
 		}
-
-		vTaskDelay(100 / portTICK_PERIOD_MS);
-	}
+		
+		vTaskDelay(100/portTICK_PERIOD_MS);
+	}	
 }

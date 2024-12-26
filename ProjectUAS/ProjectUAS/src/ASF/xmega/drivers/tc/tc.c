@@ -61,13 +61,15 @@ static tc_callback_t tc_tcc0_ccd_callback;
  * This function will handle interrupt on Timer Counter CO overflow and
  * call the callback function.
  */
+/*
+// DIKOMEN KARENA CONFLICT SAMA TIMER DARI FREERTOS
 ISR(TCC0_OVF_vect)
 {
 	if (tc_tcc0_ovf_callback) {
 		tc_tcc0_ovf_callback();
 	}
 }
-
+*/
 /**
  * \internal
  * \brief Interrupt handler for Timer Counter C0 error
