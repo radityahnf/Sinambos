@@ -17,8 +17,9 @@
 /* Define FreeRTOS tasks */
 static portTASK_FUNCTION_PROTO(vUltrasonicSensor, p_);
 static portTASK_FUNCTION_PROTO(vSoilSensor, q_);
-static portTASK_FUNCTION_PROTO(vCounter, r_);
-static portTASK_FUNCTION_PROTO(vPushButton1, s_);
+static portTASK_FUNCTION_PROTO(vPhotosensitiveSensor, r_);
+static portTASK_FUNCTION_PROTO(vCounter, s_);
+static portTASK_FUNCTION_PROTO(vPushButton1, t_);
 
 /* Define semaphore */
 SemaphoreHandle_t xSemaphore;
@@ -35,6 +36,33 @@ uint16_t map(uint16_t x, uint16_t in_min, uint16_t in_max, uint16_t out_min, uin
 uint16_t map(uint16_t x, uint16_t in_min, uint16_t in_max, uint16_t out_min, uint16_t out_max) {
 	return ((uint32_t)(x - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min;
 }
+
+
+/* Photosensitive Sensor Variables */
+static char lightResult[128];
+
+/* Functions for Photosensitive Sensor*/
+// Setup PB3 as input
+void setup_photosensitive_sensor(void) {
+	PORTB.DIRCLR = PIN3_bm; // Set PB0 (connected to D0 pin of the sensor) as input
+}
+
+// Read sensor as well as save the result
+void read_photosensitive_sensor(void) {
+	static char strbuf[128];
+
+	if (!(PORTB.IN & PIN3_bm)) {
+		// D0 is HIGH, light intensity is above the threshold
+		strcpy(lightResult, "Light detected");
+		PORTC.OUTCLR = PIN1_bm;  // Turn off LED (set PA1 low)
+		} else {
+		// D0 is LOW, light intensity is below the threshold
+		strcpy(lightResult, "No light detected");
+		PORTC.OUTSET = PIN1_bm;  // Turn on LED (set PA1 high)
+	}	
+}
+
+
 
 /* Soil Moisture Sensor Variables */
 #define MY_ADC    ADCA
@@ -168,7 +196,7 @@ int main (void)
 	gfx_mono_init();
 	
 	gpio_set_pin_high(LCD_BACKLIGHT_ENABLE_PIN);
-	gfx_mono_draw_string("RTOS v10.2.1", 0, 0, &sysfont);
+	gfx_mono_draw_string("Proyek UAS Sinambos", 0, 0, &sysfont);
 	
 	// Workaround for known issue: Enable RTC32 sysclk
 	sysclk_enable_module(SYSCLK_PORT_GEN, SYSCLK_RTC);
@@ -181,13 +209,15 @@ int main (void)
 	// Setup
 	setup_timer();
 	adc_init_soil();
+	setup_photosensitive_sensor();
 	
 	/* Create the task */
-	xTaskCreate(vUltrasonicSensor, "", 1000, NULL, tskIDLE_PRIORITY + 0, NULL);	// higher priority
-	xTaskCreate(vSoilSensor, "", 1000, NULL, tskIDLE_PRIORITY + 2, NULL);	// higher priority
-	xTaskCreate(vPushButton1, "", 1000, NULL, tskIDLE_PRIORITY + 3, NULL);	// higher priority
-	xTaskCreate(vCounter, "", 1000, NULL, tskIDLE_PRIORITY + 1, NULL);			// low priority
-	
+	xTaskCreate(vUltrasonicSensor, "", 1000, NULL, tskIDLE_PRIORITY + 1, NULL);
+	xTaskCreate(vSoilSensor, "", 1000, NULL, tskIDLE_PRIORITY + 3, NULL);
+	xTaskCreate(vPhotosensitiveSensor, "", 1000, NULL, tskIDLE_PRIORITY + 2, NULL);	
+	xTaskCreate(vPushButton1, "", 1000, NULL, tskIDLE_PRIORITY + 4, NULL);
+	xTaskCreate(vCounter, "", 1000, NULL, tskIDLE_PRIORITY + 0, NULL);
+		
 	/* Semaphore */
 	xSemaphore = xSemaphoreCreateBinary();
 	xSemaphoreGive(xSemaphore);
@@ -206,12 +236,12 @@ static portTASK_FUNCTION(vUltrasonicSensor, p_) {
 			//tc_enable(&TCE1);		// Start the timer (doesnt work bruh)
 			tc_write_clock_source(&TCE1, TC_CLKSEL_DIV1_gc);	// Start the timer
 			
-			PORTB.DIRSET = PIN0_bm;    // Set PIN0 direction as output
-			PORTB.OUTCLR = PIN0_bm;    // Set PIN0 low
-			PORTB.OUTSET = PIN0_bm;    // Set PIN0 high
+			PORTB.DIRSET = PIN0_bm;    // Set PortB PIN0 direction as output
+			PORTB.OUTCLR = PIN0_bm;    // Set PortB PIN0 only, to low
+			PORTB.OUTSET = PIN0_bm;    // Set PortB PIN0 only, to high
 			delay_us(5);               // Keep it high for 5us
-			PORTB.OUTCLR = PIN0_bm;    // Set PIN0 back to low
-			PORTB.DIRCLR = PIN0_bm;    // Set PIN0 direction back to input			
+			PORTB.OUTCLR = PIN0_bm;    // Set PortB Pin0 only, back to low
+			PORTB.DIRCLR = PIN0_bm;    // Set PortB PIN0 direction back to input			
 			delay_us(400); //Delay holdoff selama 750us
 			int oldinc = incremental;
 			delay_us(115); //Delay lagi, kali ini seharusnya pin menjadi high
@@ -232,17 +262,22 @@ static portTASK_FUNCTION(vUltrasonicSensor, p_) {
 			cpu_irq_disable(); //Interrupt dimatikan
 			
 			if (incremental > 300){ //Jika hasil lebih dari 300 cm, dibulatkan menjadi 300 cm
-				distance = 300;
-				snprintf(strbuf, sizeof(strbuf), "Panjang: %d cm   ", distance);
-				gfx_mono_draw_string(strbuf, 0, 0, &sysfont);
-				incremental = 0;
+				distance = 300;				
 			} else {
 				int inc = newinc - oldinc;
 				distance = inc/2; //Dibagi 2 seperti rumus sonar
-				snprintf(strbuf, sizeof(strbuf), "Panjang: %d cm   ", distance);
-				gfx_mono_draw_string(strbuf, 0, 0, &sysfont);
-				incremental = 0; //reset nilai variable incremental
 			}
+			
+			// Map the distance to percentage
+			distance_percentage = map(distance, 0, 15, 0, 100);
+			if (distance_percentage > 100){
+				distance_percentage = 100;
+			}
+			
+			snprintf(strbuf, sizeof(strbuf), "Panjang: %d cm %d%%  ", distance, distance_percentage);
+			gfx_mono_draw_string(strbuf, 0, 0, &sysfont);
+			incremental = 0;	// reset incremental to 0
+			
 			xSemaphoreGive(xSemaphore);
 		}
 		vTaskDelay(150 / portTICK_PERIOD_MS);
@@ -261,33 +296,52 @@ static portTASK_FUNCTION(vSoilSensor, q_) {
 		if (xSemaphoreTake(xSemaphore, (TickType_t)10) == pdTRUE) {
 			// Read soil moisture value from the ADC
 			soilMoistureValue = adc_read_soil();
-
+			
 			// Display the soil moisture value on the LCD
-			snprintf(strbuf, sizeof(strbuf), "Soil: %u", soilMoistureValue);
+			snprintf(strbuf, sizeof(strbuf), "Soil: %u   ", soilMoistureValue);
 			gfx_mono_draw_string(strbuf, 0, 16, &sysfont);
-
+			
 			// Control the relay based on soil moisture levels
 			if (soilMoistureValue > soilMoistureThreshold) {
 				// Soil is dry, turn on the water pump (active low relay)
 				strcpy(soilMoistureResult, "Kering");
 				gpio_set_pin_low(RELAY_PIN); // Activate relay
-				snprintf(strbuf, sizeof(strbuf), "Tanah %s, Pump ON", soilMoistureResult);
-			} else if (soilMoistureValue <= soilMoistureThreshold) {
+				snprintf(strbuf, sizeof(strbuf), "Tanah %s Pump ON", soilMoistureResult);
+				} else if (soilMoistureValue <= soilMoistureThreshold) {
 				// Soil is damp, turn off the water pump
 				strcpy(soilMoistureResult, "Lembab");
 				gpio_set_pin_high(RELAY_PIN); // Deactivate relay
-				snprintf(strbuf, sizeof(strbuf), "Tanah %s, Pump OFF", soilMoistureResult);
+				snprintf(strbuf, sizeof(strbuf), "Tanah %s Pump OFF", soilMoistureResult);
 			}
 			
 			gfx_mono_draw_string(strbuf, 0, 24, &sysfont);
-						
+			
 			xSemaphoreGive(xSemaphore);
 		}
 		vTaskDelay(100/portTICK_PERIOD_MS);
 	}
 }
 
-static portTASK_FUNCTION(vCounter, r_) {
+static portTASK_FUNCTION(vPhotosensitiveSensor, r_) {
+	char strbuf[128];
+	
+	while(1) {
+		if (xSemaphoreTake(xSemaphore, (TickType_t)10) == pdTRUE) {
+			// Configure PORTC pin 1 (LED) as output
+			PORTC.DIRSET = PIN1_bm;  // Set PA1 as output
+			
+			read_photosensitive_sensor();
+			snprintf(strbuf, sizeof(strbuf), "%s   ", lightResult);
+			gfx_mono_draw_string(strbuf, 0, 16, &sysfont);
+			
+			xSemaphoreGive(xSemaphore);
+		}
+		
+		vTaskDelay(100/portTICK_PERIOD_MS);
+	}
+}
+
+static portTASK_FUNCTION(vCounter, s_) {
 	char strbuf[128];
 	
 	while(1) {
@@ -303,7 +357,7 @@ static portTASK_FUNCTION(vCounter, r_) {
 	}	
 }
 
-static portTASK_FUNCTION(vPushButton1, s_) {
+static portTASK_FUNCTION(vPushButton1, t_) {
 	char strbuf[128];
 	
 	while(1) {
