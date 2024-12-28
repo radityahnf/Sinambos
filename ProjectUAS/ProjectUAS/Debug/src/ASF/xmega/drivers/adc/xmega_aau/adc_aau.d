@@ -1,5 +1,8 @@
-src/main.d src/main.o: ../src/main.c ../src/asf.h \
- ../src/ASF/xmega/drivers/adc/adc.h ../src/ASF/xmega/utils/compiler.h \
+src/ASF/xmega/drivers/adc/xmega_aau/adc_aau.d \
+ src/ASF/xmega/drivers/adc/xmega_aau/adc_aau.o: \
+ ../src/ASF/xmega/drivers/adc/xmega_aau/adc_aau.c \
+ ../src/ASF/xmega/drivers/adc/xmega_aau/../adc.h \
+ ../src/ASF/xmega/utils/compiler.h \
  d:\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\avr\io.h \
  d:\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\avr\sfr_defs.h \
  d:\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\inttypes.h \
@@ -41,56 +44,9 @@ src/main.d src/main.o: ../src/main.c ../src/asf.h \
  ../src/ASF/common/services/clock/osc.h \
  ../src/ASF/common/services/clock/xmega/osc.h \
  ../src/ASF/common/services/clock/pll.h \
- ../src/ASF/common/services/clock/xmega/pll.h \
- ../src/ASF/xmega/drivers/cpu/xmega_reset_cause.h \
- ../src/ASF/xmega/drivers/cpu/ccp.h \
- ../src/ASF/common/services/delay/delay.h \
- ../src/ASF/common/services/delay/xmega/cycle_counter.h \
- ../src/ASF/common/services/gfx_mono/gfx_mono_menu.h \
- ../src/config/conf_menu.h ../src/ASF/common/services/gfx_mono/gfx_mono.h \
- ../src/ASF/xmega/utils/progmem.h \
- ../src/ASF/common/services/gfx_mono/gfx_mono_c12832_a1z.h \
- ../src/ASF/common/components/display/st7565r/st7565r.h \
- ../src/ASF/common/services/ioport/ioport.h \
- ../src/ASF/common/services/ioport/xmega/ioport.h \
- ../src/ASF/common/services/ioport/xmega/ioport_compat.h \
- ../src/ASF/common/services/ioport/xmega/../ioport.h \
- ../src/ASF/xmega/utils/status_codes.h ../src/config/conf_st7565r.h \
- ../src/ASF/common/services/spi/usart_spi.h \
- ../src/ASF/common/services/spi/xmega_usart_spi/usart_spi.h \
- ../src/ASF/xmega/drivers/usart/usart.h \
- ../src/ASF/xmega/drivers/pmic/pmic.h ../src/config/conf_usart_spi.h \
- ../src/ASF/common/services/gfx_mono/gfx_mono.h \
- ../src/ASF/common/services/gfx_mono/gfx_mono_framebuffer.h \
- ../src/ASF/common/services/gfx_mono/gfx_mono_generic.h \
- ../src/ASF/common/services/gfx_mono/gfx_mono_spinctrl.h \
- ../src/config/conf_spinctrl.h \
- ../src/ASF/common/services/gfx_mono/sysfont.h \
- ../src/config/conf_sysfont.h \
- ../src/ASF/common/services/gfx_mono/gfx_mono_text.h \
- ../src/ASF/common/services/gpio/gpio.h \
- ../src/ASF/common/services/gpio/xmega_gpio/xmega_gpio.h \
- ../src/ASF/xmega/drivers/spi/spi.h \
- ../src/ASF/common/services/spi/xmega_spi/spi_master.h \
- ../src/config/conf_spi_master.h \
- ../src/ASF/common/services/sleepmgr/xmega/sleepmgr.h \
- ../src/ASF/xmega/drivers/tc/tc.h \
- ../src/ASF/xmega/boards/xmega_a3bu_xplained/led.h \
- d:\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\stdio.h \
- d:\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\lib\gcc\avr\5.4.0\include\stdarg.h \
- d:\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\string.h \
- ../src/FreeRTOS/include/FreeRTOS.h ../src/config/FreeRTOSConfig.h \
- ../src/FreeRTOS/include/projdefs.h ../src/FreeRTOS/include/portable.h \
- ../src/FreeRTOS/include/deprecated_definitions.h \
- ../src/FreeRTOS/portable/GCC/ATXMega256A3BU/portmacro.h \
- ../src/FreeRTOS/include/mpu_wrappers.h ../src/FreeRTOS/include/queue.h \
- ../src/FreeRTOS/include/task.h ../src/FreeRTOS/include/list.h \
- ../src/FreeRTOS/include/task.h ../src/FreeRTOS/include/timers.h \
- ../src/FreeRTOS/include/semphr.h ../src/FreeRTOS/include/queue.h
+ ../src/ASF/common/services/clock/xmega/pll.h
 
-../src/asf.h:
-
-../src/ASF/xmega/drivers/adc/adc.h:
+../src/ASF/xmega/drivers/adc/xmega_aau/../adc.h:
 
 ../src/ASF/xmega/utils/compiler.h:
 
@@ -183,111 +139,3 @@ d:\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\avr\sleep.h:
 ../src/ASF/common/services/clock/pll.h:
 
 ../src/ASF/common/services/clock/xmega/pll.h:
-
-../src/ASF/xmega/drivers/cpu/xmega_reset_cause.h:
-
-../src/ASF/xmega/drivers/cpu/ccp.h:
-
-../src/ASF/common/services/delay/delay.h:
-
-../src/ASF/common/services/delay/xmega/cycle_counter.h:
-
-../src/ASF/common/services/gfx_mono/gfx_mono_menu.h:
-
-../src/config/conf_menu.h:
-
-../src/ASF/common/services/gfx_mono/gfx_mono.h:
-
-../src/ASF/xmega/utils/progmem.h:
-
-../src/ASF/common/services/gfx_mono/gfx_mono_c12832_a1z.h:
-
-../src/ASF/common/components/display/st7565r/st7565r.h:
-
-../src/ASF/common/services/ioport/ioport.h:
-
-../src/ASF/common/services/ioport/xmega/ioport.h:
-
-../src/ASF/common/services/ioport/xmega/ioport_compat.h:
-
-../src/ASF/common/services/ioport/xmega/../ioport.h:
-
-../src/ASF/xmega/utils/status_codes.h:
-
-../src/config/conf_st7565r.h:
-
-../src/ASF/common/services/spi/usart_spi.h:
-
-../src/ASF/common/services/spi/xmega_usart_spi/usart_spi.h:
-
-../src/ASF/xmega/drivers/usart/usart.h:
-
-../src/ASF/xmega/drivers/pmic/pmic.h:
-
-../src/config/conf_usart_spi.h:
-
-../src/ASF/common/services/gfx_mono/gfx_mono.h:
-
-../src/ASF/common/services/gfx_mono/gfx_mono_framebuffer.h:
-
-../src/ASF/common/services/gfx_mono/gfx_mono_generic.h:
-
-../src/ASF/common/services/gfx_mono/gfx_mono_spinctrl.h:
-
-../src/config/conf_spinctrl.h:
-
-../src/ASF/common/services/gfx_mono/sysfont.h:
-
-../src/config/conf_sysfont.h:
-
-../src/ASF/common/services/gfx_mono/gfx_mono_text.h:
-
-../src/ASF/common/services/gpio/gpio.h:
-
-../src/ASF/common/services/gpio/xmega_gpio/xmega_gpio.h:
-
-../src/ASF/xmega/drivers/spi/spi.h:
-
-../src/ASF/common/services/spi/xmega_spi/spi_master.h:
-
-../src/config/conf_spi_master.h:
-
-../src/ASF/common/services/sleepmgr/xmega/sleepmgr.h:
-
-../src/ASF/xmega/drivers/tc/tc.h:
-
-../src/ASF/xmega/boards/xmega_a3bu_xplained/led.h:
-
-d:\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\stdio.h:
-
-d:\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\lib\gcc\avr\5.4.0\include\stdarg.h:
-
-d:\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\string.h:
-
-../src/FreeRTOS/include/FreeRTOS.h:
-
-../src/config/FreeRTOSConfig.h:
-
-../src/FreeRTOS/include/projdefs.h:
-
-../src/FreeRTOS/include/portable.h:
-
-../src/FreeRTOS/include/deprecated_definitions.h:
-
-../src/FreeRTOS/portable/GCC/ATXMega256A3BU/portmacro.h:
-
-../src/FreeRTOS/include/mpu_wrappers.h:
-
-../src/FreeRTOS/include/queue.h:
-
-../src/FreeRTOS/include/task.h:
-
-../src/FreeRTOS/include/list.h:
-
-../src/FreeRTOS/include/task.h:
-
-../src/FreeRTOS/include/timers.h:
-
-../src/FreeRTOS/include/semphr.h:
-
-../src/FreeRTOS/include/queue.h:

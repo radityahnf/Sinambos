@@ -8,6 +8,10 @@ src\ASF\common\services\gfx_mono\gfx_mono_c12832_a1z.c
 
 src\ASF\common\services\sleepmgr\xmega\sleepmgr.c
 
+src\ASF\xmega\drivers\adc\adc.c
+
+src\ASF\xmega\drivers\adc\xmega_aau\adc_aau.c
+
 src\ASF\xmega\drivers\tc\tc.c
 
 src\ASF\xmega\drivers\usart\usart.c
