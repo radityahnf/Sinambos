@@ -280,10 +280,10 @@ static inline bool usart_data_register_is_empty(USART_t * usart)
  *
  * \param usart The USART module.
  */
-static inline bool usart_rx_is_complete(USART_t * usart)
-{
-	return (usart)->STATUS & USART_RXCIF_bm;
-}
+ static inline bool usart_rx_is_complete(USART_t * usart)
+ {
+ return (usart)->STATUS & USART_RXCIF_bm;
+ }
 
 /**
  * \brief Checks if the TX complete interrupt flag is set.

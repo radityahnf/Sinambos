@@ -226,7 +226,14 @@ enum status_code usart_putchar(USART_t *usart, uint8_t c)
  */
 uint8_t usart_getchar(USART_t *usart)
 {
+	uint16_t elapsed_time = 0;
+	
 	while (usart_rx_is_complete(usart) == false) {
+		// delay_ms(1); // Add a small delay to avoid busy-waiting
+		elapsed_time++;
+		if (elapsed_time >= 100) {		// Time out 100ms
+			return 0xFF; // Timeout occurred
+		}
 	}
 	
 	return ((uint8_t)(usart)->DATA);
