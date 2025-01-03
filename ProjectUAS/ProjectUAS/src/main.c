@@ -152,9 +152,7 @@ void setup_timer(void){
 	tc_set_wgm(&TCE1, TC_WG_NORMAL);
 	tc_write_period(&TCE1, 58);		// 29 microseconds
 	tc_set_overflow_interrupt_level(&TCE1, TC_INT_LVL_HI);
-	// tc_write_clock_source(&TCE1, TC_CLKSEL_DIV1_gc);
 	tc_write_clock_source(&TCE1, TC_CLKSEL_OFF_gc); // Stop the timer
-	//tc_disable(&TCE1);	// Stop the timer (fails bruh)
 }
 
 //Fungsi ini untuk increment nilai variabel "increment" setiap 29us
@@ -192,11 +190,11 @@ int main (void)
 	setup_photosensitive_sensor();
 	
 	/* Create the task */
-	xTaskCreate(vUltrasonicSensor, "", 1000, NULL, tskIDLE_PRIORITY + 1, NULL);
-	xTaskCreate(vSoilSensor, "", 1000, NULL, tskIDLE_PRIORITY + 3, NULL);
-	xTaskCreate(vPhotosensitiveSensor, "", 1000, NULL, tskIDLE_PRIORITY + 2, NULL);	
-	xTaskCreate(vSendUART, "", 1000, NULL, tskIDLE_PRIORITY + 4, NULL);
-	xTaskCreate(vReceiveUART, "", 1000, NULL, tskIDLE_PRIORITY + 5, NULL);
+	xTaskCreate(vUltrasonicSensor, "", 1000, NULL, tskIDLE_PRIORITY + 3, NULL);
+	xTaskCreate(vSoilSensor, "", 1000, NULL, tskIDLE_PRIORITY + 5, NULL);
+	xTaskCreate(vPhotosensitiveSensor, "", 1000, NULL, tskIDLE_PRIORITY + 4, NULL);	
+	xTaskCreate(vSendUART, "", 1000, NULL, tskIDLE_PRIORITY + 1, NULL);
+	xTaskCreate(vReceiveUART, "", 1000, NULL, tskIDLE_PRIORITY + 2, NULL);
 		
 	/* Semaphore */
 	xSemaphore = xSemaphoreCreateBinary();
@@ -211,15 +209,15 @@ static portTASK_FUNCTION(vUltrasonicSensor, p_) {
 	//setup_timer();
 	while(1) {
 		if (xSemaphoreTake(xSemaphore, (TickType_t)10) == pdTRUE) {
-			tc_write_clock_source(&TCE1, TC_CLKSEL_DIV1_gc);	// Start the timer
+			tc_write_clock_source(&TCE1, TC_CLKSEL_DIV1_gc);	// Start timer
 			
-			PORTB.DIRSET = PIN0_bm;    // Set PortB PIN0 direction as output
-			PORTB.OUTCLR = PIN0_bm;    // Set PortB PIN0 only, to low
-			PORTB.OUTSET = PIN0_bm;    // Set PortB PIN0 only, to high
-			delay_us(5);               // Keep it high for 5us
-			PORTB.OUTCLR = PIN0_bm;    // Set PortB Pin0 only, back to low
-			PORTB.DIRCLR = PIN0_bm;    // Set PortB PIN0 direction back to input			
-			delay_us(400); //Delay holdoff selama 750us
+			PORTB.DIRSET = PIN0_bm;    // Set arah PortB PIN0 sebagai output
+			PORTB.OUTCLR = PIN0_bm;    // Set PortB PIN0 menjadi low
+			PORTB.OUTSET = PIN0_bm;    // Set PortB PIN0 menjadi high
+			delay_us(5);               // Tahan high selama 5us
+			PORTB.OUTCLR = PIN0_bm;    // Set PortB Pin0 menjadi low kembali
+			PORTB.DIRCLR = PIN0_bm;    // Set arah PortB PIN0 kembali menjadi input			
+			delay_us(400); //Delay holdoff selama 400us
 			int oldinc = incremental;
 			delay_us(115); //Delay lagi, kali ini seharusnya pin menjadi high
 			
@@ -241,7 +239,7 @@ static portTASK_FUNCTION(vUltrasonicSensor, p_) {
 				distance = inc/2; //Dibagi 2 seperti rumus sonar
 			}
 			
-			// Map the distance to percentage
+			// Map jaraknya menjadi persentase dan dikurangi 100 agar terbalik (jarak tertinggi berarti 0 persen, jarak terpanjang berarti 100 persen)
 			distancePercentage = 100 - map(distance, 0, 11, 0, 100);
 			if (distancePercentage > 100){
 				distancePercentage = 0;
@@ -249,7 +247,7 @@ static portTASK_FUNCTION(vUltrasonicSensor, p_) {
 			
 			snprintf(strbuf, sizeof(strbuf), "Panjang: %d cm %d%%  ", distance, distancePercentage);
 			gfx_mono_draw_string(strbuf, 0, 0, &sysfont);
-			incremental = 0;	// reset incremental to 0
+			incremental = 0;	// reset incremental menjadi 0
 			
 			xSemaphoreGive(xSemaphore);
 		}
@@ -261,23 +259,27 @@ static portTASK_FUNCTION(vSoilSensor, q_) {
 	char strbuf[128];
 	uint16_t soilMoistureValue = 0;
 	
-	// Initialize relay pin as output and set it to inactive (HIGH since the relay is active low, IMPORTANT!!!)
+	// Inisialisasi pin relay sebagai output dan set menjadi inactive (HIGH karena relay active low, PENTING!!!)
 	ioport_set_pin_dir(RELAY_PIN, IOPORT_DIR_OUTPUT);
-	gpio_set_pin_high(RELAY_PIN); // Set the relay to inactive state (HIGH)
+	gpio_set_pin_high(RELAY_PIN);
 	
 	while(1) {
 		if (xSemaphoreTake(xSemaphore, (TickType_t)10) == pdTRUE) {
-			// Read soil moisture value from the ADC
+			// Baca value sensor
 			soilMoistureValue = adc_read_soil();
 			
-			// Display the soil moisture value on the LCD
-			snprintf(strbuf, sizeof(strbuf), "Soil: %u   ", soilMoistureValue);
+			// Display value di LCD
+			snprintf(strbuf, sizeof(strbuf), "Soil: %u         ", soilMoistureValue);
 			gfx_mono_draw_string(strbuf, 0, 16, &sysfont);
 			
-			// Control the relay based on soil moisture levels
+			// Kontrol relay berdasarkan value dan threshold
 			if (soilMoistureValue > soilMoistureThreshold) {
-				// Soil is dry, turn on the water pump (active low relay)
-				soilMoistureResult = 0;
+				// Soil kering, nyalakan water pump (active low relay)
+				soilMoistureResult = 0;		// Untuk UART
+				
+				// Cek dahulu apakah pengguna menyalakan penanganan water pump secara otomatis atau tidak
+				// Jika tidak, maka hanya display tanah kering, tidak perlu menyalakan pump
+				// Jika iya, maka display tanah kering beserta nyalakan pump secara otomatis
 				if (pumpUART == 0) {
 					pumpStatus = 0;
 					gpio_set_pin_high(RELAY_PIN); // Deactivate relay
@@ -288,8 +290,11 @@ static portTASK_FUNCTION(vSoilSensor, q_) {
 					snprintf(strbuf, sizeof(strbuf), "Tanah kering Pump ON ");
 				}
 			} else if (soilMoistureValue <= soilMoistureThreshold) {
-				// Soil is damp, turn off the water pump
-				soilMoistureResult = 1;
+				// Soil basah, matikan water pump
+				soilMoistureResult = 1;		// Untuk UART
+				
+				// Cek dahulu apakah pengguna menyalakan penanganan water pump secara otomatis atau tidak
+				// Jika tidak, maka hanya display tanah lembab. Jika iya, maka display tanah lembab Pump Off
 				if (pumpUART == 0) {
 					pumpStatus = 0;
 					gpio_set_pin_high(RELAY_PIN); // Deactivate relay
@@ -305,7 +310,7 @@ static portTASK_FUNCTION(vSoilSensor, q_) {
 			
 			xSemaphoreGive(xSemaphore);
 		}
-		vTaskDelay(100/portTICK_PERIOD_MS);
+		vTaskDelay(80/portTICK_PERIOD_MS);
 	}
 }
 
@@ -314,12 +319,16 @@ static portTASK_FUNCTION(vPhotosensitiveSensor, r_) {
 	
 	while(1) {
 		if (xSemaphoreTake(xSemaphore, (TickType_t)10) == pdTRUE) {
-			// Configure PORTC pin 1 (LED) as output
-			PORTC.DIRSET = PIN1_bm;  // Set PA1 as output
+			// Inisialisasi PORTC pin 1 (LED) sebagai output
+			PORTC.DIRSET = PIN1_bm;
 			
+			// Cek jika Port B Pin 3 (sensor cahaya)
 			if (!(PORTB.IN & PIN3_bm)) {
-				// D0 is HIGH, light intensity is above the threshold
+				// Sensor mengembalikan HIGH, maka intensitas cahaya di atas threshold
 				snprintf(strbuf, sizeof(strbuf), "Light detected   ");
+				
+				// Cek dahulu apakah pengguna menyalakan penanganan lampu secara otomatis atau tidak
+				// Jika iya, matikan lampu karena intensitas cahaya di sekitar tanaman sudah terang
 				if (lightUART == 1) {
 					lightResult = 1;		// Terang
 					gpio_set_pin_high(LIGHT_PIN); // Deactivate light
@@ -327,8 +336,11 @@ static portTASK_FUNCTION(vPhotosensitiveSensor, r_) {
 				}
 				
 			} else {
-				// D0 is LOW, light intensity is below the threshold
+				// Sensor mengembalikan LOW, maka intensitas cahaya di bawah threshold
 				snprintf(strbuf, sizeof(strbuf), "No light detected");
+				
+				// Cek dahulu apakah pengguna menyalakan penanganan lampu secara otomatis atau tidak
+				// Jika iya, nyalakan lampu karena intensitas cahaya di sekitar tanaman masih gelap
 				if (lightUART == 1) {
 					lightResult = 0;		// Gelap
 					gpio_set_pin_low(LIGHT_PIN); // Deactivate light
@@ -346,21 +358,21 @@ static portTASK_FUNCTION(vPhotosensitiveSensor, r_) {
 }
 
 static portTASK_FUNCTION(vSendUART, s_) {
-	char buffer[50]; // String buffer to hold the formatted data
+	char buffer[50]; // String buffer untuk menyimpan data yang akan dikirimkan
 	
 	while(1)
 	{
 		if (xSemaphoreTake(xSemaphore, (TickType_t)10) == pdTRUE) {
-			// Format the string
+			// Format datanya menjadi string
 			snprintf(buffer, sizeof(buffer), "WL:%u H:%u L:%u P:%u LED:%u",
 			distancePercentage, soilMoistureResult, lightResult, pumpStatus, lightResult);	
-			// Send the formatted string character by character
+			// Kirimkan string secara karakter satu per satu
 			char *text = buffer;
 			while (*text) {
 				usart_putchar(USART_SERIAL_EXAMPLE, *text++);
 				delay_ms(20);
 			}
-					
+			gfx_mono_draw_string(buffer, 0, 16, &sysfont);	// Display data yang dikirimkan
 			xSemaphoreGive(xSemaphore);
 		}
 		
@@ -374,10 +386,9 @@ static portTASK_FUNCTION(vReceiveUART, t_) {
 	while(1) {
 		if (xSemaphoreTake(xSemaphore, (TickType_t)10) == pdTRUE) {
 			int i = 0;
-			bool validInput = true; // Flag to indicate if input was valid
+			bool validInput = true; // Flag untuk mengindikasikan bahwa input valid (ada pesan yang diterima)
 
 			while(1) {
-				//char inp = receiveChar();
 				char inp = usart_getchar(USART_SERIAL_EXAMPLE);
 				if (inp == 0xFF) { // Timeout occurred
 					validInput = false;
@@ -391,8 +402,8 @@ static portTASK_FUNCTION(vReceiveUART, t_) {
 				}
 			}
 			
-			// char reads[] = "P:1 LED:1";
-			// Parse if validInput is true
+			// char reads[] = "P:0 LED:0";		// Example
+			// Parse hanya jika validInput true
 			if (validInput) {
 				// Parse Pump
 				char *pump_temp = strchr(reads, 'P');
@@ -406,9 +417,13 @@ static portTASK_FUNCTION(vReceiveUART, t_) {
 					sscanf(led_temp, "LED:%d", &lightUART);
 				}
 				
-				snprintf(strbuf, sizeof(strbuf), "P: %d LED: %d", pumpUART, lightUART);
+				snprintf(strbuf, sizeof(strbuf), "Receive P:%d LED:%d", pumpUART, lightUART);
 				gfx_mono_draw_string(strbuf, 0, 16, &sysfont);
-			}		
+			} else {
+				// Jika tidak ada yang diterima, display bahwa Receive UART false
+				snprintf(strbuf, sizeof(strbuf), "Receive UART: False");
+				gfx_mono_draw_string(strbuf, 0, 16, &sysfont);
+			}
 			
 			xSemaphoreGive(xSemaphore);
 		}
